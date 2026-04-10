@@ -88,7 +88,11 @@ MovePicker::MovePicker(const Position&              p,
                        const CapturePieceToHistory* cph,
                        const PieceToHistory**       ch,
                        const SharedHistories*       sh,
-                       int                          pl) :
+                       int                          pl,
+                       int                          quietStrengthValue,
+                       int                          quietPlyFromRootValue,
+                       int                          quietMaxPliesValue,
+                       float                        quietCpGateScaleValue) :
     pos(p),
     mainHistory(mh),
     lowPlyHistory(lph),
@@ -97,7 +101,14 @@ MovePicker::MovePicker(const Position&              p,
     sharedHistory(sh),
     ttMove(ttm),
     depth(d),
-    ply(pl) {
+    ply(pl),
+    quietStrength(quietStrengthValue),
+    quietPlyFromRoot(quietPlyFromRootValue),
+    quietMaxPlies(quietMaxPliesValue),
+    quietCpGateScale(quietCpGateScaleValue) {
+
+    if (quietStrength > 0 && quietMaxPlies > 0 && quietCpGateScale > 0.0f && QuietPrior::enabled())
+        quietPrior = QuietPrior::evaluate(pos, quietPlyFromRoot);
 
     if (pos.checkers())
         stage = EVASION_TT + !(ttm && pos.pseudo_legal(ttm));
@@ -177,6 +188,11 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
 
             if (ply < LOW_PLY_HISTORY_SIZE)
                 m.value += 8 * (*lowPlyHistory)[ply][m.raw()] / (1 + ply);
+
+            if (quietStrength > 0 && quietPrior.ok)
+                m.value += QuietPrior::quiet_bonus_for_move(
+                  quietPrior, m, quietStrength, quietPlyFromRoot, quietMaxPlies, quietCpGateScale,
+                  quietPrior.confidence);
         }
 
         else  // Type == EVASIONS

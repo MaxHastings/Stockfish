@@ -36,6 +36,7 @@
 #include "nnue/nnue_misc.h"
 #include "numa.h"
 #include "perft.h"
+#include "quietprior.h"
 #include "position.h"
 #include "search.h"
 #include "shm.h"
@@ -118,6 +119,31 @@ Engine::Engine(std::optional<std::string> path) :
                        Stockfish::Search::Skill::HighestElo));
 
     options.add("UCI_ShowWDL", Option(false));
+
+    options.add(  //
+      "QuietPriorEnabled", Option(false));
+
+    options.add(  //
+      "QuietPriorStrength", Option(1, 0, 100));
+
+    options.add(  //
+      "QuietPriorPlies", Option(4, 0, 8));
+
+    options.add(  //
+      "QuietPriorCpGate", Option(25, 0, 300));
+
+    options.add(  //
+      "QuietPriorRootOnly", Option(true));
+
+    options.add(  //
+      "QuietPriorFile", Option("", [](const Option& o) -> std::optional<std::string> {
+          const std::string path = o;
+          if (path.empty())
+              QuietPrior::unload();
+          else if (!QuietPrior::load(path))
+              return std::optional<std::string>("Failed to load QuietPrior file");
+          return {};
+      }));
 
     options.add(  //
       "SyzygyPath", Option("", [](const Option& o) {

@@ -21,6 +21,7 @@
 
 #include "history.h"
 #include "movegen.h"
+#include "quietprior.h"
 #include "types.h"
 
 namespace Stockfish {
@@ -46,7 +47,11 @@ class MovePicker {
                const CapturePieceToHistory*,
                const PieceToHistory**,
                const SharedHistories*,
-               int);
+               int,
+               int,
+               int,
+               int,
+               float);
     MovePicker(const Position&, Move, int, const CapturePieceToHistory*);
     Move next_move();
     void skip_quiet_moves();
@@ -71,6 +76,11 @@ class MovePicker {
     int                          threshold;
     Depth                        depth;
     int                          ply;
+    int                          quietStrength;
+    int                          quietPlyFromRoot;
+    int                          quietMaxPlies;
+    float                        quietCpGateScale;
+    QuietPrior::PositionResult    quietPrior;
     bool                         skipQuiets = false;
     ExtMove                      moves[MAX_MOVES];
 };
