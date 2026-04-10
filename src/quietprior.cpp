@@ -522,19 +522,14 @@ int quiet_bonus_for_move(
   const PositionResult& result,
   Move                  move,
   int                   strength,
-  int                   plyFromRoot,
-  int                   maxPlies,
-  float                 cpGateScale,
   float                 confidenceScale) {
     const MoveInfo* info = find_move(result, move);
-    if (!info || !result.ok || strength <= 0 || maxPlies <= 0 || cpGateScale <= 0.0f
-        || confidenceScale <= 0.0f)
+    if (!info || !result.ok || strength <= 0 || confidenceScale <= 0.0f)
         return 0;
 
-    const float plyScale = std::max(0.0f, 1.0f - float(std::max(0, plyFromRoot - 1)) / float(maxPlies));
     const float centered = std::log(std::max(info->prob, 1.0e-20f))
                          - std::log(1.0f / float(std::max<std::size_t>(1, result.moves.size())));
-    const float bonus = centered * float(strength) * cpGateScale * confidenceScale * plyScale * 512.0f;
+    const float bonus = centered * float(strength) * confidenceScale * 512.0f;
     return int(std::lround(bonus));
 }
 

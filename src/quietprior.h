@@ -56,9 +56,6 @@ int quiet_bonus_for_move(
   const PositionResult& result,
   Move                  move,
   int                   strength,
-  int                   plyFromRoot,
-  int                   maxPlies,
-  float                 cpGateScale,
   float                 confidenceScale);
 
 }  // namespace Stockfish::QuietPrior

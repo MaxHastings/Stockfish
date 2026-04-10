@@ -127,13 +127,7 @@ Engine::Engine(std::optional<std::string> path) :
       "QuietPriorStrength", Option(1, 0, 100));
 
     options.add(  //
-      "QuietPriorPlies", Option(4, 0, 8));
-
-    options.add(  //
-      "QuietPriorCpGate", Option(25, 0, 300));
-
-    options.add(  //
-      "QuietPriorRootOnly", Option(true));
+      "QuietPriorHistoryGap", Option(2000, 0, 30000));
 
     options.add(  //
       "QuietPriorFile", Option("", [](const Option& o) -> std::optional<std::string> {

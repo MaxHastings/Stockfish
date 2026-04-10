@@ -170,28 +170,20 @@ bool quiet_prior_enabled(const OptionsMap& options) {
     return quiet_prior_active(options) && int(options["QuietPriorStrength"]) > 0;
 }
 
-bool quiet_prior_root_only(const OptionsMap& options) {
-    return bool(options["QuietPriorRootOnly"]);
-}
-
 std::string_view quiet_prior_mode(const OptionsMap& options) {
     if (!quiet_prior_active(options))
         return "pure-engine";
     if (int(options["QuietPriorStrength"]) <= 0)
         return "metadata-only";
-    return quiet_prior_root_only(options) ? "root-prior" : "near-root-prior";
+    return "history-gated-prior";
 }
 
 int quiet_prior_strength(const OptionsMap& options) {
     return int(options["QuietPriorStrength"]);
 }
 
-int quiet_prior_plies(const OptionsMap& options) {
-    return int(options["QuietPriorPlies"]);
-}
-
-float quiet_prior_cp_gate_scale(const OptionsMap& options) {
-    return int(options["QuietPriorCpGate"]) > 0 ? 1.0f : 0.0f;
+int quiet_prior_history_gap(const OptionsMap& options) {
+    return int(options["QuietPriorHistoryGap"]);
 }
 
 Search::Worker::Worker(SharedState&                    sharedState,
@@ -1049,15 +1041,11 @@ moves_loop:  // When in check, search starts here
       (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
 
-    const int   quietStrength = quiet_prior_enabled(options)
-                                 && (rootNode || !quiet_prior_root_only(options))
-                                   ? quiet_prior_strength(options)
-                                   : 0;
-    const int   quietMaxPlies = quietStrength > 0 ? quiet_prior_plies(options) : 0;
-    const float quietCpGateScale = quietStrength > 0 ? quiet_prior_cp_gate_scale(options) : 0.0f;
+    const int quietStrength   = quiet_prior_enabled(options) ? quiet_prior_strength(options) : 0;
+    const int quietHistoryGap  = quietStrength > 0 ? quiet_prior_history_gap(options) : 0;
 
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                  &sharedHistory, ss->ply, quietStrength, ss->ply, quietMaxPlies, quietCpGateScale);
+                  &sharedHistory, ss->ply, quietStrength, ss->ply, quietHistoryGap);
 
     value = bestValue;
 
@@ -1674,15 +1662,11 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // Initialize a MovePicker object for the current position, and prepare to search
     // the moves. We presently use two stages of move generator in quiescence search:
     // captures, or evasions only when in check.
-    const int   quietStrength = quiet_prior_enabled(options) && !quiet_prior_root_only(options)
-                                  ? quiet_prior_strength(options)
-                                  : 0;
-    const int   quietMaxPlies = quietStrength > 0 ? quiet_prior_plies(options) : 0;
-    const float quietCpGateScale = quietStrength > 0 ? quiet_prior_cp_gate_scale(options) : 0.0f;
+    const int quietStrength  = quiet_prior_enabled(options) ? quiet_prior_strength(options) : 0;
+    const int quietHistoryGap = quietStrength > 0 ? quiet_prior_history_gap(options) : 0;
 
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &sharedHistory, ss->ply, quietStrength, ss->ply, quietMaxPlies,
-                  quietCpGateScale);
+                  contHist, &sharedHistory, ss->ply, quietStrength, ss->ply, quietHistoryGap);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.

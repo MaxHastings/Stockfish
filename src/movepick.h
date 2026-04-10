@@ -50,8 +50,7 @@ class MovePicker {
                int,
                int,
                int,
-               int,
-               float);
+               int);
     MovePicker(const Position&, Move, int, const CapturePieceToHistory*);
     Move next_move();
     void skip_quiet_moves();
@@ -78,8 +77,7 @@ class MovePicker {
     int                          ply;
     int                          quietStrength;
     int                          quietPlyFromRoot;
-    int                          quietMaxPlies;
-    float                        quietCpGateScale;
+    int                          quietHistoryGap;
     QuietPrior::PositionResult    quietPrior;
     bool                         skipQuiets = false;
     ExtMove                      moves[MAX_MOVES];

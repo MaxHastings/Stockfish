@@ -91,8 +91,7 @@ MovePicker::MovePicker(const Position&              p,
                        int                          pl,
                        int                          quietStrengthValue,
                        int                          quietPlyFromRootValue,
-                       int                          quietMaxPliesValue,
-                       float                        quietCpGateScaleValue) :
+                       int                          quietHistoryGapValue) :
     pos(p),
     mainHistory(mh),
     lowPlyHistory(lph),
@@ -104,11 +103,7 @@ MovePicker::MovePicker(const Position&              p,
     ply(pl),
     quietStrength(quietStrengthValue),
     quietPlyFromRoot(quietPlyFromRootValue),
-    quietMaxPlies(quietMaxPliesValue),
-    quietCpGateScale(quietCpGateScaleValue) {
-
-    if (quietStrength > 0 && quietMaxPlies > 0 && quietCpGateScale > 0.0f && QuietPrior::enabled())
-        quietPrior = QuietPrior::evaluate(pos, quietPlyFromRoot);
+    quietHistoryGap(quietHistoryGapValue) {
 
     if (pos.checkers())
         stage = EVASION_TT + !(ttm && pos.pseudo_legal(ttm));
@@ -151,58 +146,86 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
     }
 
     ExtMove* it = cur;
+    if constexpr (Type == QUIETS)
+    {
+        int       topQuietHistory    = std::numeric_limits<int>::min();
+        int       secondQuietHistory = std::numeric_limits<int>::min();
+        int quietCount = 0;
+        ExtMove* quietBegin = it;
+        for (auto move : ml)
+        {
+            ExtMove& m = *it++;
+            m          = move;
+
+            const Square    from = m.from_sq();
+            const Square    to   = m.to_sq();
+            const Piece     pc   = pos.moved_piece(m);
+            const PieceType pt   = type_of(pc);
+
+            int value = 2 * (*mainHistory)[us][move.raw()];
+            value += 2 * sharedHistory->pawn_entry(pos)[pc][to];
+            value += (*continuationHistory[0])[pc][to];
+            value += (*continuationHistory[1])[pc][to];
+            value += (*continuationHistory[2])[pc][to];
+            value += (*continuationHistory[3])[pc][to];
+            value += (*continuationHistory[5])[pc][to];
+            value += (bool(pos.check_squares(pt) & to) && pos.see_ge(move, -75)) * 16384;
+            int v = 20 * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
+            value += PieceValue[pt] * v;
+            if (ply < LOW_PLY_HISTORY_SIZE)
+                value += 8 * (*lowPlyHistory)[ply][move.raw()] / (1 + ply);
+
+            m.value = value;
+            if (value > topQuietHistory)
+            {
+                secondQuietHistory = topQuietHistory;
+                topQuietHistory    = value;
+            }
+            else if (value > secondQuietHistory)
+                secondQuietHistory = value;
+            ++quietCount;
+        }
+
+        const bool applyQuietPrior = quietStrength > 0 && quietHistoryGap > 0 && quietCount >= 2
+                                   && (topQuietHistory - secondQuietHistory) <= quietHistoryGap
+                                   && QuietPrior::enabled();
+        if (applyQuietPrior)
+            quietPrior = QuietPrior::evaluate(pos, quietPlyFromRoot);
+
+        if (applyQuietPrior && quietPrior.ok)
+            for (ExtMove* move = quietBegin; move != it; ++move)
+                move->value += QuietPrior::quiet_bonus_for_move(quietPrior, *move, quietStrength,
+                                                                quietPrior.confidence);
+
+        return it;
+    }
+
     for (auto move : ml)
     {
         ExtMove& m = *it++;
         m          = move;
 
-        const Square    from          = m.from_sq();
-        const Square    to            = m.to_sq();
-        const Piece     pc            = pos.moved_piece(m);
-        const PieceType pt            = type_of(pc);
-        const Piece     capturedPiece = pos.piece_on(to);
+        const Square to   = m.to_sq();
+        const Piece  pc   = pos.moved_piece(m);
 
         if constexpr (Type == CAPTURES)
-            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)]
-                    + 7 * int(PieceValue[capturedPiece]);
-
-        else if constexpr (Type == QUIETS)
         {
-            // histories
-            m.value = 2 * (*mainHistory)[us][m.raw()];
-            m.value += 2 * sharedHistory->pawn_entry(pos)[pc][to];
-            m.value += (*continuationHistory[0])[pc][to];
-            m.value += (*continuationHistory[1])[pc][to];
-            m.value += (*continuationHistory[2])[pc][to];
-            m.value += (*continuationHistory[3])[pc][to];
-            m.value += (*continuationHistory[5])[pc][to];
-
-            // bonus for checks
-            m.value += (bool(pos.check_squares(pt) & to) && pos.see_ge(m, -75)) * 16384;
-
-            // penalty for moving to a square threatened by a lesser piece
-            // or bonus for escaping an attack by a lesser piece.
-            int v = 20 * (bool(threatByLesser[pt] & from) - bool(threatByLesser[pt] & to));
-            m.value += PieceValue[pt] * v;
-
-
-            if (ply < LOW_PLY_HISTORY_SIZE)
-                m.value += 8 * (*lowPlyHistory)[ply][m.raw()] / (1 + ply);
-
-            if (quietStrength > 0 && quietPrior.ok)
-                m.value += QuietPrior::quiet_bonus_for_move(
-                  quietPrior, m, quietStrength, quietPlyFromRoot, quietMaxPlies, quietCpGateScale,
-                  quietPrior.confidence);
+            const Piece capturedPiece = pos.piece_on(to);
+            m.value = (*captureHistory)[pc][to][type_of(capturedPiece)] + 7 * int(PieceValue[capturedPiece]);
         }
 
         else  // Type == EVASIONS
         {
             if (pos.capture_stage(m))
+            {
+                const Piece capturedPiece = pos.piece_on(to);
                 m.value = PieceValue[capturedPiece] + (1 << 28);
+            }
             else
                 m.value = (*mainHistory)[us][m.raw()] + (*continuationHistory[0])[pc][to];
         }
     }
+
     return it;
 }
 
