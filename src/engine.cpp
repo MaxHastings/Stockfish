@@ -127,7 +127,7 @@ Engine::Engine(std::optional<std::string> path) :
       "QuietPriorStrength", Option(1, 0, 100));
 
     options.add(  //
-      "QuietPriorHistoryGap", Option(2000, 0, 30000));
+      "QuietPriorQuietCountMin", Option(10, 0, 30));
 
     options.add(  //
       "QuietPriorFile", Option("", [](const Option& o) -> std::optional<std::string> {
@@ -359,6 +359,31 @@ void Engine::trace_eval() const {
     verify_networks();
 
     sync_cout << "\n" << Eval::trace(p, *networks) << sync_endl;
+}
+
+void Engine::trace_quietprior() const {
+    const auto s = QuietPrior::stats();
+    const auto gateRate = s.gateChecks ? 100.0 * double(s.gatePasses) / double(s.gateChecks) : 0.0;
+    const auto hitRate  = (s.cacheHits + s.cacheMisses)
+                            ? 100.0 * double(s.cacheHits) / double(s.cacheHits + s.cacheMisses)
+                            : 0.0;
+    const auto avgSignal = s.gateChecks ? double(s.gateSignalSum) / double(s.gateChecks) : 0.0;
+    const auto avgBonus = s.bonusMoves ? double(s.bonusSum) / double(s.bonusMoves) : 0.0;
+    const auto avgAbsBonus = s.bonusMoves ? double(s.bonusAbsSum) / double(s.bonusMoves) : 0.0;
+
+    sync_cout << "info string quietprior enabled=" << bool(options["QuietPriorEnabled"])
+              << " strength=" << int(options["QuietPriorStrength"])
+              << " quiet_count_min=" << int(options["QuietPriorQuietCountMin"])
+              << " evals=" << s.evaluations << " cache_hits=" << s.cacheHits
+              << " cache_misses=" << s.cacheMisses << " cache_hit_rate=" << hitRate
+              << " legal_moves=" << s.legalMoves << " eval_nanos=" << s.evalNanos
+              << " gate_checks=" << s.gateChecks << " gate_passes=" << s.gatePasses
+              << " gate_misses=" << s.gateMisses << " gate_rate=" << gateRate
+              << " avg_signal=" << avgSignal << " max_signal=" << s.gateSignalMax
+              << " bonus_calls=" << s.bonusCalls << " bonus_moves=" << s.bonusMoves
+              << " bonus_sum=" << s.bonusSum << " bonus_abs_sum=" << s.bonusAbsSum
+              << " avg_bonus=" << avgBonus << " avg_abs_bonus=" << avgAbsBonus
+              << " top_move_changes=" << s.topMoveChanges << sync_endl;
 }
 
 const OptionsMap& Engine::get_options() const { return options; }

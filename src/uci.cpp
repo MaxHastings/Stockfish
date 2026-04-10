@@ -34,6 +34,7 @@
 #include "engine.h"
 #include "memory.h"
 #include "movegen.h"
+#include "quietprior.h"
 #include "position.h"
 #include "score.h"
 #include "search.h"
@@ -148,6 +149,13 @@ void UCIEngine::loop() {
             sync_cout << engine.visualize() << sync_endl;
         else if (token == "eval")
             engine.trace_eval();
+        else if (token == "quietprior")
+            engine.trace_quietprior();
+        else if (token == "quietprior_reset")
+        {
+            QuietPrior::reset_stats();
+            sync_cout << "info string quietprior stats reset" << sync_endl;
+        }
         else if (token == "compiler")
             sync_cout << compiler_info() << sync_endl;
         else if (token == "export_net")

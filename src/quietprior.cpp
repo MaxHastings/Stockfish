@@ -133,6 +133,27 @@ class Runtime {
         stats_ = Stats{};
     }
 
+    void record_regime_gate(bool passed, int signal) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stats_.gateChecks++;
+        stats_.gateSignalSum += std::uint64_t(std::max(signal, 0));
+        stats_.gateSignalMax = std::max(stats_.gateSignalMax, std::uint64_t(std::max(signal, 0)));
+        if (passed)
+            stats_.gatePasses++;
+        else
+            stats_.gateMisses++;
+    }
+
+    void record_bonus_application(int moveCount, bool changedTopMove, int totalBonus, int totalAbsBonus) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        stats_.bonusCalls++;
+        stats_.bonusMoves += std::uint64_t(std::max(moveCount, 0));
+        stats_.bonusSum += totalBonus;
+        stats_.bonusAbsSum += std::uint64_t(std::max(totalAbsBonus, 0));
+        if (changedTopMove)
+            stats_.topMoveChanges++;
+    }
+
     PositionResult evaluate(const Position& pos, int plyFromRoot) {
         std::lock_guard<std::mutex> lock(mutex_);
         if (!loaded_)
@@ -510,6 +531,10 @@ void unload() { runtime().unload(); }
 PositionResult evaluate(const Position& pos, int plyFromRoot) { return runtime().evaluate(pos, plyFromRoot); }
 Stats stats() { return runtime().stats(); }
 void reset_stats() { runtime().reset_stats(); }
+void record_regime_gate(bool passed, int signal) { runtime().record_regime_gate(passed, signal); }
+void record_bonus_application(int moveCount, bool changedTopMove, int totalBonus, int totalAbsBonus) {
+    runtime().record_bonus_application(moveCount, changedTopMove, totalBonus, totalAbsBonus);
+}
 
 const MoveInfo* find_move(const PositionResult& result, Move move) {
     for (const auto& info : result.moves)
@@ -529,7 +554,7 @@ int quiet_bonus_for_move(
 
     const float centered = std::log(std::max(info->prob, 1.0e-20f))
                          - std::log(1.0f / float(std::max<std::size_t>(1, result.moves.size())));
-    const float bonus = centered * float(strength) * confidenceScale * 512.0f;
+    const float bonus = centered * float(strength) * confidenceScale * 128.0f;
     return int(std::lround(bonus));
 }
 

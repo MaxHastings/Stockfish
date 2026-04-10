@@ -38,11 +38,21 @@ struct PositionResult {
 };
 
 struct Stats {
-    std::uint64_t evaluations  = 0;
+    std::uint64_t evaluations   = 0;
     std::uint64_t cacheHits     = 0;
     std::uint64_t cacheMisses   = 0;
     std::uint64_t legalMoves    = 0;
     std::uint64_t evalNanos     = 0;
+    std::uint64_t gateChecks    = 0;
+    std::uint64_t gatePasses    = 0;
+    std::uint64_t gateMisses    = 0;
+    std::uint64_t gateSignalSum = 0;
+    std::uint64_t gateSignalMax = 0;
+    std::uint64_t bonusMoves    = 0;
+    std::uint64_t bonusAbsSum   = 0;
+    std::int64_t  bonusSum      = 0;
+    std::uint64_t bonusCalls    = 0;
+    std::uint64_t topMoveChanges = 0;
 };
 
 bool enabled();
@@ -52,6 +62,8 @@ PositionResult evaluate(const Position& pos, int plyFromRoot);
 const MoveInfo* find_move(const PositionResult& result, Move move);
 Stats stats();
 void  reset_stats();
+void  record_regime_gate(bool passed, int signal);
+void  record_bonus_application(int moveCount, bool changedTopMove, int totalBonus, int totalAbsBonus);
 int quiet_bonus_for_move(
   const PositionResult& result,
   Move                  move,

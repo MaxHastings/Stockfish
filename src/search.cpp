@@ -175,15 +175,15 @@ std::string_view quiet_prior_mode(const OptionsMap& options) {
         return "pure-engine";
     if (int(options["QuietPriorStrength"]) <= 0)
         return "metadata-only";
-    return "history-gated-prior";
+    return "regime-gated-prior";
 }
 
 int quiet_prior_strength(const OptionsMap& options) {
     return int(options["QuietPriorStrength"]);
 }
 
-int quiet_prior_history_gap(const OptionsMap& options) {
-    return int(options["QuietPriorHistoryGap"]);
+int quiet_prior_quiet_count_min(const OptionsMap& options) {
+    return int(options["QuietPriorQuietCountMin"]);
 }
 
 Search::Worker::Worker(SharedState&                    sharedState,
@@ -1041,11 +1041,11 @@ moves_loop:  // When in check, search starts here
       (ss - 4)->continuationHistory, (ss - 5)->continuationHistory, (ss - 6)->continuationHistory};
 
 
-    const int quietStrength   = quiet_prior_enabled(options) ? quiet_prior_strength(options) : 0;
-    const int quietHistoryGap  = quietStrength > 0 ? quiet_prior_history_gap(options) : 0;
+    const int quietStrength     = quiet_prior_enabled(options) ? quiet_prior_strength(options) : 0;
+    const int quietCountMin     = quietStrength > 0 ? quiet_prior_quiet_count_min(options) : 0;
 
     MovePicker mp(pos, ttData.move, depth, &mainHistory, &lowPlyHistory, &captureHistory, contHist,
-                  &sharedHistory, ss->ply, quietStrength, ss->ply, quietHistoryGap);
+                  &sharedHistory, ss->ply, quietStrength, ss->ply, quietCountMin);
 
     value = bestValue;
 
@@ -1663,10 +1663,10 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta)
     // the moves. We presently use two stages of move generator in quiescence search:
     // captures, or evasions only when in check.
     const int quietStrength  = quiet_prior_enabled(options) ? quiet_prior_strength(options) : 0;
-    const int quietHistoryGap = quietStrength > 0 ? quiet_prior_history_gap(options) : 0;
+    const int quietCountMin  = quietStrength > 0 ? quiet_prior_quiet_count_min(options) : 0;
 
     MovePicker mp(pos, ttData.move, DEPTH_QS, &mainHistory, &lowPlyHistory, &captureHistory,
-                  contHist, &sharedHistory, ss->ply, quietStrength, ss->ply, quietHistoryGap);
+                  contHist, &sharedHistory, ss->ply, quietStrength, ss->ply, quietCountMin);
 
     // Step 5. Loop through all pseudo-legal moves until no moves remain or a beta
     // cutoff occurs.

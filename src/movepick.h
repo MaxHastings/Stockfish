@@ -77,7 +77,7 @@ class MovePicker {
     int                          ply;
     int                          quietStrength;
     int                          quietPlyFromRoot;
-    int                          quietHistoryGap;
+    int                          quietCountMin;
     QuietPrior::PositionResult    quietPrior;
     bool                         skipQuiets = false;
     ExtMove                      moves[MAX_MOVES];

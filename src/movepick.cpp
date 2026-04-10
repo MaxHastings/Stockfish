@@ -18,6 +18,7 @@
 
 #include "movepick.h"
 
+#include <array>
 #include <cassert>
 #include <limits>
 #include <utility>
@@ -72,6 +73,36 @@ void partial_insertion_sort(ExtMove* begin, ExtMove* end, int limit) {
         }
 }
 
+int quiet_prior_phase(const Position& pos) {
+    const auto count_piece = [&](PieceType pt) {
+        return popcount(pos.pieces(WHITE, pt) | pos.pieces(BLACK, pt));
+    };
+    const int pawns   = count_piece(PAWN);
+    const int knights = count_piece(KNIGHT);
+    const int bishops = count_piece(BISHOP);
+    const int rooks   = count_piece(ROOK);
+    const int queens  = count_piece(QUEEN);
+    const int nonKingPieces = pawns + knights + bishops + rooks + queens;
+    const int remainingMaterial = pawns + 3 * knights + 3 * bishops + 5 * rooks + 9 * queens;
+    if (pos.game_ply() < 12 && remainingMaterial >= 40)
+        return 0;
+    if (remainingMaterial <= 18 || nonKingPieces <= 8)
+        return 2;
+    return 1;
+}
+
+bool quiet_prior_low_tactical_pressure(const Position& pos) {
+    int legalCount = 0;
+    int tacticalCount = 0;
+    for (const Move move : MoveList<LEGAL>(pos))
+    {
+        ++legalCount;
+        if (pos.capture_stage(move) || move.type_of() == PROMOTION || pos.gives_check(move))
+            ++tacticalCount;
+    }
+    return legalCount > 0 && tacticalCount * 5 <= legalCount;
+}
+
 }  // namespace
 
 
@@ -91,7 +122,7 @@ MovePicker::MovePicker(const Position&              p,
                        int                          pl,
                        int                          quietStrengthValue,
                        int                          quietPlyFromRootValue,
-                       int                          quietHistoryGapValue) :
+                       int                          quietCountMinValue) :
     pos(p),
     mainHistory(mh),
     lowPlyHistory(lph),
@@ -103,7 +134,7 @@ MovePicker::MovePicker(const Position&              p,
     ply(pl),
     quietStrength(quietStrengthValue),
     quietPlyFromRoot(quietPlyFromRootValue),
-    quietHistoryGap(quietHistoryGapValue) {
+    quietCountMin(quietCountMinValue) {
 
     if (pos.checkers())
         stage = EVASION_TT + !(ttm && pos.pseudo_legal(ttm));
@@ -152,6 +183,8 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
         int       secondQuietHistory = std::numeric_limits<int>::min();
         int quietCount = 0;
         ExtMove* quietBegin = it;
+        ExtMove* historyBest = quietBegin;
+        ExtMove* historySecond = quietBegin;
         for (auto move : ml)
         {
             ExtMove& m = *it++;
@@ -180,22 +213,34 @@ ExtMove* MovePicker::score(const MoveList<Type>& ml) {
             {
                 secondQuietHistory = topQuietHistory;
                 topQuietHistory    = value;
+                historySecond      = historyBest;
+                historyBest        = &m;
             }
             else if (value > secondQuietHistory)
+            {
                 secondQuietHistory = value;
+                historySecond      = &m;
+            }
             ++quietCount;
         }
 
-        const bool applyQuietPrior = quietStrength > 0 && quietHistoryGap > 0 && quietCount >= 2
-                                   && (topQuietHistory - secondQuietHistory) <= quietHistoryGap
-                                   && QuietPrior::enabled();
+        const bool calmPhase = quiet_prior_phase(pos) <= 1;
+        const bool regimeCandidate = quietStrength > 0 && quietCountMin > 0 && quietCount >= quietCountMin
+                                   && quietPlyFromRoot <= 1 && calmPhase && QuietPrior::enabled();
+        const bool applyQuietPrior = regimeCandidate && quiet_prior_low_tactical_pressure(pos);
+        QuietPrior::record_regime_gate(applyQuietPrior, quietCount);
         if (applyQuietPrior)
             quietPrior = QuietPrior::evaluate(pos, quietPlyFromRoot);
 
         if (applyQuietPrior && quietPrior.ok)
-            for (ExtMove* move = quietBegin; move != it; ++move)
-                move->value += QuietPrior::quiet_bonus_for_move(quietPrior, *move, quietStrength,
-                                                                quietPrior.confidence);
+        {
+            const QuietPrior::MoveInfo* bestInfo  = QuietPrior::find_move(quietPrior, Move(*historyBest));
+            const QuietPrior::MoveInfo* secondInfo = QuietPrior::find_move(quietPrior, Move(*historySecond));
+            const bool swapped = bestInfo && secondInfo && secondInfo->prob > bestInfo->prob;
+            if (swapped)
+                std::swap(historyBest->value, historySecond->value);
+            QuietPrior::record_bonus_application(2, swapped, 0, 0);
+        }
 
         return it;
     }
